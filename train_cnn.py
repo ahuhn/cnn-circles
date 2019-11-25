@@ -1,5 +1,8 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 from comet_ml import Experiment
-from datetime import datetime
 
 import tensorflow as tf
 import numpy as np
@@ -120,13 +123,13 @@ def add_conv_layer(conv_layer, conv_in, filter_in_count, filters_out, should_poo
 
 def get_filters_out_from_hyper_params(hyper_params):
     filters_out = []
-    if "count_2x2_square" in hyper_params:
+    if "count_2x2_square" in hyper_params and hyper_params["count_2x2_square"]:
         filters_out.append({"filter_shape": "square", "filter_size": 2, "filter_count": hyper_params["count_2x2_square"]})
-    if "count_4x4_circle" in hyper_params:
+    if "count_4x4_circle" in hyper_params and hyper_params["count_4x4_circle"]:
         filters_out.append({"filter_shape": "circle", "filter_size": 4, "filter_count": hyper_params["count_4x4_circle"]})
-    if "count_3x3_square" in hyper_params:
+    if "count_3x3_square" in hyper_params and hyper_params["count_3x3_square"]:
         filters_out.append({"filter_shape": "square", "filter_size": 3, "filter_count": hyper_params["count_3x3_square"]})
-    if "count_3x3_circle" in hyper_params:
+    if "count_3x3_circle" in hyper_params and hyper_params["count_3x3_circle"]:
         filters_out.append({"filter_shape": "circle", "filter_size": 3, "filter_count": hyper_params["count_3x3_circle"]})
     return filters_out
 
@@ -148,21 +151,28 @@ def build_cnn_model_graph(hyper_params):
         # Move everything into depth so we can perform a single matrix multiply.
         flat_size = local3_input.shape[1] * local3_input.shape[2] * local3_input.shape[3]
         reshaped = tf.reshape(local3_input, [-1, flat_size])
-        dim = reshaped.get_shape()[1].value
-        weights = _variable_with_weight_decay(
-            "weights", shape=[dim, hyper_params["fully_connected_1"]], stddev=0.04, wd=0.004
-        )
-        biases = _get_variable_with_initializer("biases", [hyper_params["fully_connected_1"]], mean=0.1)
-        local3 = tf.nn.relu(tf.matmul(reshaped, weights) + biases, name=scope.name)
+        if hyper_params["fully_connected_1"]:
+            dim = reshaped.get_shape()[1].value
+            weights = _variable_with_weight_decay(
+                "weights", shape=[dim, hyper_params["fully_connected_1"]], stddev=0.04, wd=0.004
+            )
+            biases = _get_variable_with_initializer("biases", [hyper_params["fully_connected_1"]], mean=0.1)
+            local3 = tf.nn.relu(tf.matmul(reshaped, weights) + biases, name=scope.name)
+        else:
+            local3 = reshaped
     print(local3.shape)
 
     # local4
     with tf.variable_scope("local4") as scope:
-        weights = _variable_with_weight_decay(
-            "weights", shape=[hyper_params["fully_connected_1"], hyper_params["fully_connected_2"]], stddev=0.04, wd=0.004
-        )
-        biases = _get_variable_with_initializer("biases", [hyper_params["fully_connected_2"]], mean=0.1)
-        local4 = tf.nn.relu(tf.matmul(local3, weights) + biases, name=scope.name)
+        if hyper_params["fully_connected_2"]:
+            dim = local3.get_shape()[1].value
+            weights = _variable_with_weight_decay(
+                "weights", shape=[dim, hyper_params["fully_connected_2"]], stddev=0.04, wd=0.004
+            )
+            biases = _get_variable_with_initializer("biases", [hyper_params["fully_connected_2"]], mean=0.1)
+            local4 = tf.nn.relu(tf.matmul(local3, weights) + biases, name=scope.name)
+        else:
+            local4 = local3
     print(local4.shape)
 
     # linear layer(WX + b),
@@ -170,8 +180,9 @@ def build_cnn_model_graph(hyper_params):
     # tf.nn.sparse_softmax_cross_entropy_with_logits accepts the unscaled logits
     # and performs the softmax internally for efficiency.
     with tf.variable_scope("softmax_linear") as scope:
+        dim = local4.get_shape()[1].value
         weights = _variable_with_weight_decay(
-            "weights", [hyper_params["fully_connected_2"], hyper_params["num_classes"]], stddev=1 / float(hyper_params["fully_connected_2"]), wd=None
+            "weights", [dim, hyper_params["num_classes"]], stddev=1 / float(dim), wd=None
         )
         biases = _get_variable_with_initializer("biases", [hyper_params["num_classes"]])
         softmax_linear = tf.add(tf.matmul(local4, weights), biases, name=scope.name)
@@ -192,25 +203,25 @@ def build_cnn_model_graph(hyper_params):
     return train_step, cross_entropy, accuracy, x, y, y_
 
 
-def build_basic_model_graph(hyper_params):
-    # Create the model
-    x = tf.compat.v1.placeholder(tf.float32, [None, 784])
-    W = tf.compat.v1.Variable(tf.zeros([784, 10]))
-    b = tf.compat.v1.Variable(tf.zeros([10]))
-    y = tf.compat.v1.matmul(x, W) + b
+# def build_basic_model_graph(hyper_params):
+#     # Create the model
+#     x = tf.compat.v1.placeholder(tf.float32, [None, 784])
+#     W = tf.compat.v1.Variable(tf.zeros([784, 10]))
+#     b = tf.compat.v1.Variable(tf.zeros([10]))
+#     y = tf.compat.v1.matmul(x, W) + b
 
-    # Define loss and optimizer
-    y_ = tf.compat.v1.placeholder(tf.float32, [None, 10])
+#     # Define loss and optimizer
+#     y_ = tf.compat.v1.placeholder(tf.float32, [None, 10])
 
-    cross_entropy = tf.compat.v1.reduce_mean(
-        tf.compat.v1.nn.softmax_cross_entropy_with_logits_v2(labels=y_, logits=y))
-    train_step = tf.compat.v1.train.GradientDescentOptimizer(hyper_params['learning_rate']).minimize(cross_entropy)
+#     cross_entropy = tf.compat.v1.reduce_mean(
+#         tf.compat.v1.nn.softmax_cross_entropy_with_logits_v2(labels=y_, logits=y))
+#     train_step = tf.compat.v1.train.GradientDescentOptimizer(hyper_params['learning_rate']).minimize(cross_entropy)
 
-    correct_prediction = tf.compat.v1.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
-    correct_prediction = tf.compat.v1.cast(correct_prediction, tf.float32)
-    accuracy = tf.compat.v1.reduce_mean(correct_prediction)
+#     correct_prediction = tf.compat.v1.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
+#     correct_prediction = tf.compat.v1.cast(correct_prediction, tf.float32)
+#     accuracy = tf.compat.v1.reduce_mean(correct_prediction)
 
-    return train_step, cross_entropy, accuracy, x, y, y_
+#     return train_step, cross_entropy, accuracy, x, y, y_
 
 def train(hyper_params):
     mnist = get_data()
@@ -220,7 +231,6 @@ def train(hyper_params):
 
     experiment = Experiment(api_key="DqTmFnwT1ksBOGat3MV8699kB", project_name="tf_test_cnn", workspace="ahuhn")
     experiment.log_parameters(hyper_params)
-    experiment.log_parameters({"start_time": datetime.now()})
     experiment.log_dataset_hash(mnist)
 
     with tf.Session() as sess:
@@ -232,7 +242,7 @@ def train(hyper_params):
                 batch = mnist.train.next_batch(hyper_params["batch_size"])
                 experiment.set_step(i)
                 # Compute train accuracy every 10 steps
-                if i % 10 == 0:
+                if i % 100 == 0:
                     train_accuracy = accuracy.eval(feed_dict={x: batch[0], y_: batch[1]})
                     print('step %d, training accuracy %g' % (i, train_accuracy))
                     experiment.log_metric("accuracy",train_accuracy,step=i)
@@ -253,18 +263,22 @@ def train(hyper_params):
 
 if __name__ == '__main__':
     hyper_params = {
-        "learning_rate": 0.5,
-        "steps": 1000,
+        "learning_rate": 0.003,
+        "steps": 10000,
         "batch_size": 50,
         "data_set": "mnist",
         "count_2x2_square": 4,
         "count_4x4_circle": 8,
         "count_3x3_square": 12,
         "count_3x3_circle": 8,
-        "conv_layer_count": 5,
+        # "count_2x2_square": 0,
+        # "count_4x4_circle": 0,
+        # "count_3x3_square": 25,
+        # "count_3x3_circle": 0,
+        "conv_layer_count": 3,
         "num_classes": 10,
         "total_pixel_count": 784,
-        "fully_connected_1": 40,
-        "fully_connected_2": 20,
+        "fully_connected_1": 0,
+        "fully_connected_2": 0,
     }
     train(hyper_params)
