@@ -275,7 +275,7 @@ if __name__ == '__main__':
         # "count_4x4_circle": 0,
         # "count_3x3_square": 25,
         # "count_3x3_circle": 0,
-        "conv_layer_count": 3,
+        "conv_layer_count": 2,
         "num_classes": 10,
         "total_pixel_count": 784,
         "fully_connected_1": 0,
