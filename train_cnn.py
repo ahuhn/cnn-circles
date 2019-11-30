@@ -85,8 +85,8 @@ def adjustable_conv2d(conv_in, filter_size, channels_in, channels_out, filter_sh
         stddev=5e-2,
         wd=None,
     )
-    conv_out = tf.nn.conv2d(conv_in, weights, [1, 1, 1, 1], padding="SAME")
-    conv_out = apply_mask(conv_out, filter_shape)
+    filtered_weights = apply_mask(weights, filter_shape)
+    conv_out = tf.nn.conv2d(conv_in, filtered_weights, [1, 1, 1, 1], padding="SAME")
     return conv_out
 
 
@@ -267,15 +267,15 @@ if __name__ == '__main__':
         "steps": 10000,
         "batch_size": 50,
         "data_set": "mnist",
-        "count_2x2_square": 4,
-        "count_4x4_circle": 8,
-        "count_3x3_square": 12,
-        "count_3x3_circle": 8,
-        # "count_2x2_square": 0,
-        # "count_4x4_circle": 0,
-        # "count_3x3_square": 25,
-        # "count_3x3_circle": 0,
-        "conv_layer_count": 2,
+        # "count_2x2_square": 4,
+        # "count_4x4_circle": 8,
+        # "count_3x3_square": 12,
+        # "count_3x3_circle": 8,
+        "count_2x2_square": 0,
+        "count_4x4_circle": 0,
+        "count_3x3_square": 25,
+        "count_3x3_circle": 0,
+        "conv_layer_count": 3,
         "num_classes": 10,
         "total_pixel_count": 784,
         "fully_connected_1": 0,
