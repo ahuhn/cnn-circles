@@ -6,8 +6,9 @@ from comet_ml import Experiment
 
 import tensorflow as tf
 import numpy as np
-from tensorflow.keras import datasets, layers, models, constraints
+from tensorflow.keras import datasets, layers, models, constraints, Input, Sequential
 import matplotlib.pyplot as plt
+
 
 CIFAR10_CLASS_NAMES = ['airplane', 'automobile', 'bird', 'cat', 'deer',
                'dog', 'frog', 'horse', 'ship', 'truck']
@@ -69,47 +70,69 @@ def _get_mask(filter_shape_name, filter_dims, channels_in):
     return mask
 
 
-class FilterShapeConstraint(constraints.Constraint):
-    """
-    Adjusts the shape of the filter by multiplying some weights by 0
-    Arguments:
-      axis: integer, axis along which to calculate weight norms.
-          For instance, in a `Dense` layer the weight matrix
-          has shape `(input_dim, output_dim)`,
-          set `axis` to `0` to constrain each weight vector
-          of length `(input_dim,)`.
-          In a `Conv2D` layer with `data_format="channels_last"`,
-          the weight tensor has shape
-          `(rows, cols, input_depth, output_depth)`,
-          set `axis` to `[0, 1, 2]`
-          to constrain the weights of each filter tensor of size
-          `(rows, cols, input_depth)`.
-    """
+# class FilterShapeConstraint(constraints.Constraint):
+#     """
+#     Adjusts the shape of the filter by multiplying some weights by 0
+#     """
 
-    def __init__(self, filter_shape_name, filter_dims, channels_in):
-        self.filter_shape_name = filter_shape_name
-        self.filter_dims = filter_dims
-        self.mask = _get_mask(filter_shape_name, filter_dims, channels_in)
+#     def __init__(self, filter_shape_name, filter_dims, channels_in):
+#         self.filter_shape_name = filter_shape_name
+#         self.filter_dims = filter_dims
+#         self.mask = _get_mask(filter_shape_name, filter_dims, channels_in)
 
-    def __call__(self, w):
-        return w * self.mask
+#     def __call__(self, w):
+#         return w * self.mask
+
+#     def get_config(self):
+#         return {"filter_shape_name": self.filter_shape_name, "filter_dims": self.filter_dims, "channels_in": channels_in}
+
+class ConvLayerWithFilters(layers.Layer):
+    def __init__(self, filters_out):
+        super(ConvLayerWithFilters, self).__init__()
+        self.filters_out = filters_out
+        print("trainable", self.trainable)
+
+    def build(self, input_shape):
+        self.sublayer_list = []
+        print("input_shape", input_shape)
+
+        channels_in = input_shape[-1]
+        conv = layers.Conv2D(64, (3, 3), padding="same", activation='relu', input_shape=(32, 32, channels_in))
+        self.sublayer_list.append(conv)
+        # for i, filter_out in enumerate(self.filters_out):
+        #     # constraint = FilterShapeConstraint(filter_out["filter_shape_name"], filter_out["filter_dims"], channels_in)
+        #     # conv = layers.Conv2D(filter_out["filter_count"], filter_out["filter_dims"], padding="same", activation='relu', kernel_constraint=constraint, input_shape=input_shape)
+        #     conv = layers.Conv2D(64, (3, 3), padding="same", activation='relu', input_shape=(32, 32, 3))
+        #     pool = layers.MaxPooling2D((2, 2))
+        #     normalize = None # layers.BatchNormalization()
+        #     self.sublayer_list.append((conv, pool, normalize))
+
+        # print(len(self.sublayer_list[0][0].get_weights()))
+        # print(len(self.sublayer_list[0][0].trainable_variables))
+        # print(len(self.sublayer_list[0][0].non_trainable_variables))
+        super(ConvLayerWithFilters, self).build(input_shape)
+
+    # @tf.function()
+    def call(self, input_data):
+        # print(len(self.get_weights()))
+        # print(len(self.trainable_variables))
+        # print(len(self.non_trainable_variables))
+        output_list = []
+        for conv in self.sublayer_list:
+            output_list.append(conv(input_data))
+
+        if not output_list:
+            return input_data
+        elif len(output_list) == 1:
+            return output_list[0]
+        else:
+            return layers.Concatenate()(output_list)
+
+    def compute_output_shape(self, input_shape):
+        return input_shape
 
     def get_config(self):
-        return {"filter_shape_name": self.filter_shape_name, "filter_dims": self.filter_dims, "channels_in": channels_in}
-
-def _add_conv_layer(channels_in, filters_out, should_pool):
-    conv_list = []
-
-    # Each loop takes in conv_in and adds new channels to conv_out. Each needs to be the same size.
-    for i, filter_out in enumerate(filters_out):
-        constraint = FilterShapeConstraint(filter_out["filter_shape_name"], filter_out["filter_dims"], channels_in)
-
-        conv = layers.Conv2D(filter_out["filter_count"], filter_out["filter_dims"], activation='relu', kernel_constraint=constraint, input_shape=(32, 32, channels_in))
-        if should_pool:
-            conv = layers.MaxPooling2D((2, 2))(conv)
-        conv_list.append(conv)
-
-    return layers.Concatenate()(conv_list)
+        return {"filters_out": filters_out}
 
 def _get_filters_out_from_hyper_params(hyper_params):
     filters_out = []
@@ -121,19 +144,26 @@ def _get_filters_out_from_hyper_params(hyper_params):
         filters_out.append({"filter_shape_name": "square", "filter_dims": (3, 3), "filter_count": hyper_params["count_3x3_square"]})
     if "count_3x3_circle" in hyper_params and hyper_params["count_3x3_circle"]:
         filters_out.append({"filter_shape_name": "circle", "filter_dims": (3, 3), "filter_count": hyper_params["count_3x3_circle"]})
-    if "count_6x6_horizontal_line" in hyper_params and hyper_params["count_6x6_horizontal_line"]:
-        filters_out.append({"filter_shape_name": "horizontal_line", "filter_dims": (6, 2), "filter_count": hyper_params["count_6x6_horizontal_line"]})
-    if "count_6x6_vertical_line" in hyper_params and hyper_params["count_6x6_vertical_line"]:
-        filters_out.append({"filter_shape_name": "vertical_line", "filter_dims": (2, 6), "filter_count": hyper_params["count_6x6_vertical_line"]})
+    if "count_6x6_line1" in hyper_params and hyper_params["count_6x6_line1"]:
+        filters_out.append({"filter_shape_name": "line1", "filter_dims": (6, 2), "filter_count": hyper_params["count_6x6_line1"]})
+    if "count_6x6_line2" in hyper_params and hyper_params["count_6x6_line2"]:
+        filters_out.append({"filter_shape_name": "line2", "filter_dims": (2, 6), "filter_count": hyper_params["count_6x6_line2"]})
     return filters_out
 
 def _build_cnn_model_graph(hyper_params):
     filters_out = _get_filters_out_from_hyper_params(hyper_params)
-    filters_out_count = sum(filter_out["filter_count"] for filter_out in filters_out)
-    model = models.Sequential()
-    model.add(_add_conv_layer(channels_in=3, filters_out=filters_out, should_pool=True))
-    model.add(_add_conv_layer(channels_in=filters_out_count, filters_out=filters_out, should_pool=True))
-    model.add(_add_conv_layer(channels_in=filters_out_count, filters_out=filters_out, should_pool=False))
+    model = Sequential()
+
+    # model.add(layers.Conv2D(32, (3, 3), padding="same", activation='relu', input_shape=(32, 32, 3)))
+    # model.add(layers.MaxPooling2D((2, 2)))
+    # model.add(layers.Conv2D(64, (3, 3), padding="same", activation='relu'))
+    # model.add(layers.MaxPooling2D((2, 2)))
+    # model.add(layers.Conv2D(64, (3, 3), padding="same", activation='relu'))
+    model.add(ConvLayerWithFilters(filters_out=filters_out))
+    model.add(layers.MaxPooling2D((2, 2)))
+    model.add(ConvLayerWithFilters(filters_out=filters_out))
+    model.add(layers.MaxPooling2D((2, 2)))
+    model.add(ConvLayerWithFilters(filters_out=filters_out))
     model.add(layers.Flatten())
     model.add(layers.Dense(64, activation='relu'))
     model.add(layers.Dense(10, activation='softmax'))
@@ -148,8 +178,11 @@ def train(hyper_params):
               loss='sparse_categorical_crossentropy',
               metrics=['accuracy'])
 
-    history = model.fit(train_images, train_labels, epochs=10,
+    history = model.fit(train_images, train_labels, epochs=1,
                         validation_data=(test_images, test_labels))
+    print(model.summary())
+
+    # plot_history(history)
 
     test_loss, test_acc = model.evaluate(test_images, test_labels, verbose=2)
     print(test_acc)
@@ -164,28 +197,19 @@ def plot_history(history):
     plt.ylabel('Accuracy')
     plt.ylim([0.5, 1])
     plt.legend(loc='lower right')
+    plt.show()
 
 
 if __name__ == '__main__':
     hyper_params = {
-        "learning_rate": 0.003,
-        "steps": 10000,
-        "batch_size": 50,
-        "data_set": "mnist",
-        "count_2x2_square": 4,
-        "count_4x4_circle": 8,
-        "count_3x3_square": 12,
-        "count_3x3_circle": 8,
-        "count_6x6_horizontal_line": 4,
-        "count_6x6_vertical_line": 4,
-        # "count_2x2_square": 0,
-        # "count_4x4_circle": 0,
+        # "count_2x2_square": 4,
+        # "count_4x4_circle": 8,
+        # "count_3x3_square": 12,
+        # "count_3x3_circle": 8,
+        # "count_6x6_line1": 4,
+        # "count_6x6_line2": 4,
         # "count_3x3_square": 25,
-        # "count_3x3_circle": 0,
-        "num_classes": 10,
-        "total_pixel_count": 784,
-        "fully_connected_1": 0,
-        "fully_connected_2": 0,
+        "count_3x3_square": 64,
     }
     history = train(hyper_params)
-    plot_history(history)
+    # plot_history(history)
