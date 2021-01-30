@@ -1,28 +1,61 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import annotations
 
 from comet_ml import Experiment
 
+import os
 import tensorflow as tf
 import numpy as np
 from tensorflow.keras import datasets, layers, models, constraints, Input, Sequential
+from tensorflow.python.keras.datasets.cifar import load_batch
 import matplotlib.pyplot as plt
 
 
-CIFAR10_CLASS_NAMES = ['airplane', 'automobile', 'bird', 'cat', 'deer',
-               'dog', 'frog', 'horse', 'ship', 'truck']
-
+CIFAR10_CLASS_NAMES = [
+    'airplane',
+    'automobile',
+    'bird',
+    'cat',
+    'deer',
+    'dog',
+    'frog',
+    'horse',
+    'ship',
+    'truck',
+]
 
 def _get_data():
-    (train_images, train_labels), (test_images, test_labels) = datasets.cifar10.load_data()
+    num_train_samples = 50000
+    path = "/Users/anikahuhn/code/cnn-circles/data/cifar-10-batches-py"
+
+    x_train = np.empty((num_train_samples, 3, 32, 32), dtype='uint8')
+    y_train = np.empty((num_train_samples,), dtype='uint8')
+
+    for i in range(1, 6):
+        fpath = os.path.join(path, 'data_batch_' + str(i))
+        (
+            x_train[(i - 1) * 10000:i * 10000, :, :, :], 
+            y_train[(i - 1) * 10000:i * 10000],
+        ) = load_batch(fpath)
+
+    fpath = os.path.join(path, 'test_batch')
+    x_test, y_test = load_batch(fpath)
+
+    y_train = np.reshape(y_train, (len(y_train), 1))
+    y_test = np.reshape(y_test, (len(y_test), 1))
+
+    x_train = x_train.transpose(0, 2, 3, 1)
+    x_test = x_test.transpose(0, 2, 3, 1)
+
+    x_test = x_test.astype(x_train.dtype)
+    y_test = y_test.astype(y_train.dtype)
 
     # Normalize pixel values to be between 0 and 1
-    train_images, test_images = train_images / 255.0, test_images / 255.0
-    return (train_images, train_labels), (test_images, test_labels)
+    x_train, x_test = x_train / 255.0, x_test / 255.0
+
+    return (x_train, y_train), (x_test, y_test)
 
 
-def _get_mask(filter_shape_name, filter_dims, channels_in):
+def _get_mask(filter_shape_name, filter_dims, channels_in, channels_out):
     """
     This creates a filter mask.
 
@@ -50,7 +83,7 @@ def _get_mask(filter_shape_name, filter_dims, channels_in):
     │ 0 │ 0 │ 1 │ 1 │ 0 │ 0 │
     └───┴───┴───┴───┴───┴───┘
     """
-    mask = np.ones([filter_dims[0], filter_dims[1], channels_in])
+    mask = np.ones([filter_dims[0], filter_dims[1], channels_in, channels_out], dtype=np.float32)
     if filter_shape_name == "square":
         pass
     elif filter_shape_name == "circle":
@@ -67,29 +100,29 @@ def _get_mask(filter_shape_name, filter_dims, channels_in):
             mask[-2][0] = 0
             mask[-1][-2] = 0
             mask[-2][-1] = 0
-    return mask
+    return tf.constant(mask)
 
+class FilterShapeConstraint(constraints.Constraint):
+    """
+    Adjusts the shape of the filter by multiplying some weights by 0
+    """
 
-# class FilterShapeConstraint(constraints.Constraint):
-#     """
-#     Adjusts the shape of the filter by multiplying some weights by 0
-#     """
+    def __init__(self, filter_shape_name, filter_dims, channels_in, channels_out):
+        self.filter_shape_name = filter_shape_name
+        self.filter_dims = filter_dims
+        self.mask = _get_mask(filter_shape_name, filter_dims, channels_in, channels_out)
 
-#     def __init__(self, filter_shape_name, filter_dims, channels_in):
-#         self.filter_shape_name = filter_shape_name
-#         self.filter_dims = filter_dims
-#         self.mask = _get_mask(filter_shape_name, filter_dims, channels_in)
+    def __call__(self, w):
+        return tf.multiply(self.mask, w)
 
-#     def __call__(self, w):
-#         return w * self.mask
+    def get_config(self):
+        return {"filter_shape_name": self.filter_shape_name, "filter_dims": self.filter_dims, "channels_in": channels_in}
 
-#     def get_config(self):
-#         return {"filter_shape_name": self.filter_shape_name, "filter_dims": self.filter_dims, "channels_in": channels_in}
 
 class ConvLayerWithFilters(layers.Layer):
-    def __init__(self, filters_out):
+    def __init__(self, filter_config):
         super(ConvLayerWithFilters, self).__init__()
-        self.filters_out = filters_out
+        self.filter_config = filter_config
         print("trainable", self.trainable)
 
     def build(self, input_shape):
@@ -97,15 +130,37 @@ class ConvLayerWithFilters(layers.Layer):
         print("input_shape", input_shape)
 
         channels_in = input_shape[-1]
-        conv = layers.Conv2D(64, (3, 3), padding="same", activation='relu', input_shape=(32, 32, channels_in))
-        self.sublayer_list.append(conv)
-        # for i, filter_out in enumerate(self.filters_out):
-        #     # constraint = FilterShapeConstraint(filter_out["filter_shape_name"], filter_out["filter_dims"], channels_in)
-        #     # conv = layers.Conv2D(filter_out["filter_count"], filter_out["filter_dims"], padding="same", activation='relu', kernel_constraint=constraint, input_shape=input_shape)
-        #     conv = layers.Conv2D(64, (3, 3), padding="same", activation='relu', input_shape=(32, 32, 3))
-        #     pool = layers.MaxPooling2D((2, 2))
-        #     normalize = None # layers.BatchNormalization()
-        #     self.sublayer_list.append((conv, pool, normalize))
+
+        # Really basic attempt: just one sublayer with 64 3x3 kernels
+        # conv = layers.Conv2D(64, (3, 3), padding="same", activation='relu', input_shape=(32, 32, channels_in))
+        # self.sublayer_list.append(conv)
+
+        # Split the 64 3x3 kernels into 8 sub-layers. Slower, but similar validation accuracy as the one above
+        # for i in range(0, 8):
+        #     conv = layers.Conv2D(8, (3, 3), padding="same", activation='relu', input_shape=(32, 32, channels_in))
+        #     self.sublayer_list.append(conv)
+
+        for i, filter_out in enumerate(self.filter_config):
+            # print(i)
+            # print(filter_out)
+            # print(input_shape)
+            channels_out = filter_out["filter_count"]
+            constraint = FilterShapeConstraint(filter_out["filter_shape_name"], filter_out["filter_dims"], channels_in, channels_out)
+            conv = layers.Conv2D(channels_out, filter_out["filter_dims"], padding="same", activation='relu', kernel_constraint=constraint, input_shape=input_shape)
+            # # pool = layers.MaxPooling2D((2, 2))
+            # # normalize = layers.BatchNormalization()
+            # sub_model = Sequential()
+            # sub_model.add(conv)
+            # # sub_model.add(pool)
+            # # sub_model.add(normalize)
+            # sub_model.build(input_shape)
+            self.sublayer_list.append(conv)
+
+            # old stuff:
+            # conv = layers.Conv2D(64, (3, 3), padding="same", activation='relu', input_shape=(32, 32, 3))
+            # pool = layers.MaxPooling2D((2, 2))
+            # normalize = None # layers.BatchNormalization()
+            # self.sublayer_list.append((conv, pool, normalize))
 
         # print(len(self.sublayer_list[0][0].get_weights()))
         # print(len(self.sublayer_list[0][0].trainable_variables))
@@ -132,26 +187,10 @@ class ConvLayerWithFilters(layers.Layer):
         return input_shape
 
     def get_config(self):
-        return {"filters_out": filters_out}
+        return {"filter_config": filter_config}
 
-def _get_filters_out_from_hyper_params(hyper_params):
-    filters_out = []
-    if "count_2x2_square" in hyper_params and hyper_params["count_2x2_square"]:
-        filters_out.append({"filter_shape_name": "square", "filter_dims": (2, 2), "filter_count": hyper_params["count_2x2_square"]})
-    if "count_4x4_circle" in hyper_params and hyper_params["count_4x4_circle"]:
-        filters_out.append({"filter_shape_name": "circle", "filter_dims": (4, 4), "filter_count": hyper_params["count_4x4_circle"]})
-    if "count_3x3_square" in hyper_params and hyper_params["count_3x3_square"]:
-        filters_out.append({"filter_shape_name": "square", "filter_dims": (3, 3), "filter_count": hyper_params["count_3x3_square"]})
-    if "count_3x3_circle" in hyper_params and hyper_params["count_3x3_circle"]:
-        filters_out.append({"filter_shape_name": "circle", "filter_dims": (3, 3), "filter_count": hyper_params["count_3x3_circle"]})
-    if "count_6x6_line1" in hyper_params and hyper_params["count_6x6_line1"]:
-        filters_out.append({"filter_shape_name": "line1", "filter_dims": (6, 2), "filter_count": hyper_params["count_6x6_line1"]})
-    if "count_6x6_line2" in hyper_params and hyper_params["count_6x6_line2"]:
-        filters_out.append({"filter_shape_name": "line2", "filter_dims": (2, 6), "filter_count": hyper_params["count_6x6_line2"]})
-    return filters_out
 
-def _build_cnn_model_graph(hyper_params):
-    filters_out = _get_filters_out_from_hyper_params(hyper_params)
+def _build_cnn_model_graph(filter_config):
     model = Sequential()
 
     # model.add(layers.Conv2D(32, (3, 3), padding="same", activation='relu', input_shape=(32, 32, 3)))
@@ -159,28 +198,37 @@ def _build_cnn_model_graph(hyper_params):
     # model.add(layers.Conv2D(64, (3, 3), padding="same", activation='relu'))
     # model.add(layers.MaxPooling2D((2, 2)))
     # model.add(layers.Conv2D(64, (3, 3), padding="same", activation='relu'))
-    model.add(ConvLayerWithFilters(filters_out=filters_out))
+    model.add(ConvLayerWithFilters(filter_config=filter_config))
     model.add(layers.MaxPooling2D((2, 2)))
-    model.add(ConvLayerWithFilters(filters_out=filters_out))
+    model.add(ConvLayerWithFilters(filter_config=filter_config))
     model.add(layers.MaxPooling2D((2, 2)))
-    model.add(ConvLayerWithFilters(filters_out=filters_out))
+    model.add(ConvLayerWithFilters(filter_config=filter_config))
+    model.add(layers.MaxPooling2D((2, 2)))
+    model.add(ConvLayerWithFilters(filter_config=filter_config))
     model.add(layers.Flatten())
-    model.add(layers.Dense(64, activation='relu'))
+    model.add(layers.Dense(32, activation='relu'))
     model.add(layers.Dense(10, activation='softmax'))
     return model
 
 
-def train(hyper_params):
+def train(filter_config):
     (train_images, train_labels), (test_images, test_labels) = _get_data()
 
-    model = _build_cnn_model_graph(hyper_params)
-    model.compile(optimizer='adam',
-              loss='sparse_categorical_crossentropy',
-              metrics=['accuracy'])
+    model = _build_cnn_model_graph(filter_config)
+    model.compile(
+        optimizer='adam',
+        loss='sparse_categorical_crossentropy',
+        metrics=['accuracy']
+    )
 
-    history = model.fit(train_images, train_labels, epochs=1,
-                        validation_data=(test_images, test_labels))
+    history = model.fit(
+        train_images,
+        train_labels,
+        epochs=10,
+        validation_data=(test_images, test_labels),
+    )
     print(model.summary())
+    print(history.history)
 
     # plot_history(history)
 
@@ -191,8 +239,8 @@ def train(hyper_params):
 
 
 def plot_history(history):
-    plt.plot(history.history['acc'], label='train_accuracy')
-    plt.plot(history.history['val_acc'], label = 'validation_accuracy')
+    plt.plot(history.history['accuracy'], label='train_accuracy')
+    plt.plot(history.history['val_accuracy'], label = 'validation_accuracy')
     plt.xlabel('Epoch')
     plt.ylabel('Accuracy')
     plt.ylim([0.5, 1])
@@ -201,15 +249,39 @@ def plot_history(history):
 
 
 if __name__ == '__main__':
-    hyper_params = {
-        # "count_2x2_square": 4,
-        # "count_4x4_circle": 8,
-        # "count_3x3_square": 12,
-        # "count_3x3_circle": 8,
-        # "count_6x6_line1": 4,
-        # "count_6x6_line2": 4,
-        # "count_3x3_square": 25,
-        "count_3x3_square": 64,
-    }
-    history = train(hyper_params)
-    # plot_history(history)
+    filter_config = [
+        # {
+        #     "filter_shape_name": "square",
+        #     "filter_dims": (2, 2),
+        #     "filter_count": 6,
+        # },
+        {
+            "filter_shape_name": "square",
+            "filter_dims": (3, 3),
+            "filter_count": 64,
+        },
+        # {
+        #     "filter_shape_name": "circle",
+        #     "filter_dims": (3, 3),
+        #     "filter_count": 16,
+        # },
+        # {
+        #     "filter_shape_name": "circle",
+        #     "filter_dims": (4, 4),
+        #     "filter_count": 16,
+        # },
+        # {
+        #     "filter_shape_name": "vertical_line",  # TODO: Not sure if this is horizontal or vertical
+        #     "filter_dims": (6, 2),
+        #     "filter_count": 8,
+        # },
+        # {
+        #     "filter_shape_name": "horizontal_line",  # TODO: Not sure if this is horizontal or vertical
+        #     "filter_dims": (2, 6),
+        #     "filter_count": 8,
+        # },
+        
+    ]
+
+    history = train(filter_config)
+    plot_history(history)
