@@ -5,10 +5,19 @@ from comet_ml import Experiment
 import os
 import tensorflow as tf
 import numpy as np
-from tensorflow.keras import datasets, layers, models, constraints, Input, Sequential
+from tensorflow.keras import datasets, layers, models, constraints, Input, Sequential, regularizers
 from tensorflow.python.keras.datasets.cifar import load_batch
 import matplotlib.pyplot as plt
 
+experiment = Experiment(
+    auto_metric_logging=True,
+    auto_param_logging=True,
+    auto_histogram_weight_logging=True,
+    auto_histogram_gradient_logging=True,
+    auto_histogram_activation_logging=True,
+    project_name="cnn-circles",
+    workspace="ahuhn",
+)
 
 CIFAR10_CLASS_NAMES = [
     'airplane',
@@ -33,7 +42,7 @@ def _get_data():
     for i in range(1, 6):
         fpath = os.path.join(path, 'data_batch_' + str(i))
         (
-            x_train[(i - 1) * 10000:i * 10000, :, :, :], 
+            x_train[(i - 1) * 10000:i * 10000, :, :, :],
             y_train[(i - 1) * 10000:i * 10000],
         ) = load_batch(fpath)
 
@@ -120,9 +129,9 @@ class FilterShapeConstraint(constraints.Constraint):
 
 
 class ConvLayerWithFilters(layers.Layer):
-    def __init__(self, filter_config):
+    def __init__(self, hyperparams):
         super(ConvLayerWithFilters, self).__init__()
-        self.filter_config = filter_config
+        self.hyperparams = hyperparams
         print("trainable", self.trainable)
 
     def build(self, input_shape):
@@ -140,13 +149,21 @@ class ConvLayerWithFilters(layers.Layer):
         #     conv = layers.Conv2D(8, (3, 3), padding="same", activation='relu', input_shape=(32, 32, channels_in))
         #     self.sublayer_list.append(conv)
 
-        for i, filter_out in enumerate(self.filter_config):
+        for i, filter_out in enumerate(self.hyperparams["filter_config"]):
             # print(i)
             # print(filter_out)
             # print(input_shape)
             channels_out = filter_out["filter_count"]
             constraint = FilterShapeConstraint(filter_out["filter_shape_name"], filter_out["filter_dims"], channels_in, channels_out)
-            conv = layers.Conv2D(channels_out, filter_out["filter_dims"], padding="same", activation='relu', kernel_constraint=constraint, input_shape=input_shape)
+            conv = layers.Conv2D(
+                channels_out,
+                filter_out["filter_dims"],
+                padding="same",
+                activation='relu',
+                kernel_constraint=constraint,
+                input_shape=input_shape,
+                kernel_regularizer=regularizers.L2(l2=self.hyperparams["l2"]),
+            )
             # # pool = layers.MaxPooling2D((2, 2))
             # # normalize = layers.BatchNormalization()
             # sub_model = Sequential()
@@ -198,16 +215,16 @@ def _build_cnn_model_graph(filter_config):
     # model.add(layers.Conv2D(64, (3, 3), padding="same", activation='relu'))
     # model.add(layers.MaxPooling2D((2, 2)))
     # model.add(layers.Conv2D(64, (3, 3), padding="same", activation='relu'))
-    model.add(ConvLayerWithFilters(filter_config=filter_config))
+    model.add(ConvLayerWithFilters(hyperparams={"filter_config": filter_config, "l2": 0.0003}))
     model.add(layers.MaxPooling2D((2, 2)))
-    model.add(ConvLayerWithFilters(filter_config=filter_config))
+    model.add(ConvLayerWithFilters(hyperparams={"filter_config": filter_config, "l2": 0.001}))
     model.add(layers.MaxPooling2D((2, 2)))
-    model.add(ConvLayerWithFilters(filter_config=filter_config))
+    model.add(ConvLayerWithFilters(hyperparams={"filter_config": filter_config, "l2": 0.003}))
     model.add(layers.MaxPooling2D((2, 2)))
-    model.add(ConvLayerWithFilters(filter_config=filter_config))
+    model.add(ConvLayerWithFilters(hyperparams={"filter_config": filter_config, "l2": 0.01}))
     model.add(layers.Flatten())
-    model.add(layers.Dense(32, activation='relu'))
-    model.add(layers.Dense(10, activation='softmax'))
+    model.add(layers.Dense(32, activation='relu', kernel_regularizer=regularizers.L2(l2=0.01)))
+    model.add(layers.Dense(10, activation='softmax', kernel_regularizer=regularizers.L2(l2=0.01)))
     return model
 
 
@@ -224,7 +241,7 @@ def train(filter_config):
     history = model.fit(
         train_images,
         train_labels,
-        epochs=10,
+        epochs=100,
         validation_data=(test_images, test_labels),
     )
     print(model.summary())
@@ -250,38 +267,54 @@ def plot_history(history):
 
 if __name__ == '__main__':
     filter_config = [
-        # {
-        #     "filter_shape_name": "square",
-        #     "filter_dims": (2, 2),
-        #     "filter_count": 6,
-        # },
+        {
+            "filter_shape_name": "square",
+            "filter_dims": (2, 2),
+            "filter_count": 8,
+        },
         {
             "filter_shape_name": "square",
             "filter_dims": (3, 3),
-            "filter_count": 64,
+            "filter_count": 16,
         },
+        {
+            "filter_shape_name": "circle",
+            "filter_dims": (3, 3),
+            "filter_count": 16,
+        },
+        {
+            "filter_shape_name": "circle",
+            "filter_dims": (4, 4),
+            "filter_count": 16,
+        },
+        {
+            "filter_shape_name": "vertical_line",  # TODO: Not sure if this is horizontal or vertical
+            "filter_dims": (5, 2),
+            "filter_count": 8,
+        },
+        {
+            "filter_shape_name": "horizontal_line",  # TODO: Not sure if this is horizontal or vertical
+            "filter_dims": (2, 5),
+            "filter_count": 8,
+        },
+        {
+            "filter_shape_name": "vertical_line",  # TODO: Not sure if this is horizontal or vertical
+            "filter_dims": (5, 1),
+            "filter_count": 4,
+        },
+        {
+            "filter_shape_name": "horizontal_line",  # TODO: Not sure if this is horizontal or vertical
+            "filter_dims": (1, 5),
+            "filter_count": 4,
+        },
+
         # {
-        #     "filter_shape_name": "circle",
+        #     "filter_shape_name": "square",
         #     "filter_dims": (3, 3),
-        #     "filter_count": 16,
+        #     "filter_count": 64,
         # },
-        # {
-        #     "filter_shape_name": "circle",
-        #     "filter_dims": (4, 4),
-        #     "filter_count": 16,
-        # },
-        # {
-        #     "filter_shape_name": "vertical_line",  # TODO: Not sure if this is horizontal or vertical
-        #     "filter_dims": (6, 2),
-        #     "filter_count": 8,
-        # },
-        # {
-        #     "filter_shape_name": "horizontal_line",  # TODO: Not sure if this is horizontal or vertical
-        #     "filter_dims": (2, 6),
-        #     "filter_count": 8,
-        # },
-        
+
     ]
 
     history = train(filter_config)
-    plot_history(history)
+    # plot_history(history)
