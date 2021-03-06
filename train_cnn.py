@@ -231,9 +231,17 @@ def _build_cnn_model_graph(filter_config):
 def train(filter_config):
     (train_images, train_labels), (test_images, test_labels) = _get_data()
 
+    initial_learning_rate = 0.001
+    lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
+        initial_learning_rate,
+        decay_steps=1000,
+        decay_rate=0.95,
+        staircase=True,
+    )
+
     model = _build_cnn_model_graph(filter_config)
     model.compile(
-        optimizer='adam',
+        optimizer=tf.keras.optimizers.Adam(learning_rate=lr_schedule),
         loss='sparse_categorical_crossentropy',
         metrics=['accuracy']
     )
