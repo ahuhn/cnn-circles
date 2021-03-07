@@ -8,7 +8,7 @@ import numpy as np
 import tensorflow as tf
 from attr import dataclass
 from comet_ml import Experiment
-from tensorflow.keras.datasets.cifar import load_batch
+from tensorflow.keras.datasets.cifar10 import load_data
 
 from src.resnet import get_resnet_model
 from src.types import TFHistory
@@ -50,33 +50,7 @@ class ImageData:
 
 
 def _get_data() -> ImageData:
-    num_train_samples = 50000
-    path = "/Users/anikahuhn/code/cnn-circles/data/cifar-10-batches-py"
-
-    x_train = np.empty((num_train_samples, 3, 32, 32), dtype="uint8")
-    y_train = np.empty((num_train_samples,), dtype="uint8")
-
-    for i in range(1, 6):
-        fpath = os.path.join(path, "data_batch_" + str(i))
-        (
-            x_train[(i - 1) * 10000 : i * 10000, :, :, :],
-            y_train[(i - 1) * 10000 : i * 10000],
-        ) = load_batch(fpath)
-
-    fpath = os.path.join(path, "test_batch")
-    x_test, y_test = load_batch(fpath)
-
-    y_train = np.reshape(y_train, (len(y_train), 1))
-    y_test = np.reshape(y_test, (len(y_test), 1))
-
-    x_train = x_train.transpose(0, 2, 3, 1)
-    x_test = x_test.transpose(0, 2, 3, 1)
-
-    x_test = x_test.astype(x_train.dtype)
-    y_test = y_test.astype(y_train.dtype)
-
-    # Normalize pixel values to be between 0 and 1
-    x_train, x_test = x_train / 255.0, x_test / 255.0
+    (x_train, y_train), (x_test, y_test) = load_data()
 
     return ImageData(
         train=ImageDataSet(x_train, y_train), test=ImageDataSet(x_test, y_test)
