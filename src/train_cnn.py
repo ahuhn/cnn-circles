@@ -8,15 +8,6 @@ import numpy as np
 import tensorflow as tf
 from attr import dataclass
 from comet_ml import Experiment
-from tensorflow.keras import (
-    Input,
-    Sequential,
-    constraints,
-    datasets,
-    layers,
-    models,
-    regularizers,
-)
 from tensorflow.python.keras.datasets.cifar import load_batch
 
 from src.resnet import get_resnet_model

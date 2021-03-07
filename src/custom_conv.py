@@ -6,17 +6,10 @@ from typing import Any, Optional
 import numpy as np
 import tensorflow as tf
 from attr import dataclass
-from tensorflow.python.keras import backend
-from tensorflow.python.keras.applications import imagenet_utils
 from tensorflow.python.keras.constraints import Constraint
-from tensorflow.python.keras.datasets.cifar import load_batch
-from tensorflow.python.keras.engine import training
 from tensorflow.python.keras.layers import VersionAwareLayers
-from tensorflow.python.keras.utils import data_utils, layer_utils
-from tensorflow.python.lib.io import file_io
-from tensorflow.python.util.tf_export import keras_export
 
-from src.types import KerasModel, TFConstantMask, TFShape
+from src.types import KerasModel, TFConstantMask
 
 layers = VersionAwareLayers()
 
