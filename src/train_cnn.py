@@ -8,7 +8,7 @@ import numpy as np
 import tensorflow as tf
 from attr import dataclass
 from comet_ml import Experiment
-from tensorflow.python.keras.datasets.cifar import load_batch
+from tensorflow.keras.datasets.cifar import load_batch
 
 from src.resnet import get_resnet_model
 from src.types import TFHistory
@@ -94,7 +94,10 @@ def train(filter_config: List[Dict[str, Any]]) -> TFHistory:
         staircase=True,
     )
 
-    model = get_resnet_model()
+    model = get_resnet_model(
+        input_data.train.images[0].shape,
+        class_count=len(CIFAR10_CLASS_NAMES),
+    )
     model.compile(
         optimizer=tf.keras.optimizers.Adam(learning_rate=lr_schedule),
         loss="sparse_categorical_crossentropy",

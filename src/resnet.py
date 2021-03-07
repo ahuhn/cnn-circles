@@ -1,23 +1,23 @@
 from __future__ import annotations
 
-
 # from tensorflow.keras import datasets, layers, models, constraints, Input, Sequential, regularizers
-from tensorflow.python.keras import backend
-from tensorflow.python.keras.engine import training
-from tensorflow.python.keras.layers import VersionAwareLayers
+from tensorflow.keras import Model
+from tensorflow.keras import backend as keras_backend
+from tensorflow.keras.layers import VersionAwareLayers
 
 from src.custom_conv import get_custom_conv
-from src.types import KerasModel, TFShape
+from src.types import KerasModel, TFShape, TFTensor
 
 layers = VersionAwareLayers()
 
 
 def get_resnet_model(input_shape: TFShape, class_count: int) -> KerasModel:
     img_input = layers.Input(shape=input_shape)
-    bn_axis = 3 if backend.image_data_format() == "channels_last" else 1
+    bn_axis = 3 if keras_backend.image_data_format() == "channels_last" else 1
 
-    x = layers.ZeroPadding2D(padding=((3, 3), (3, 3)), name="conv1_pad")(img_input)
-    x = get_custom_conv(x, kernel_count=64, kernel_size=7, stride=2, name="conv1_conv")
+    x = get_custom_conv(
+        img_input, kernel_count=64, kernel_size=7, stride=2, name="conv1_conv"
+    )
 
     x = layers.BatchNormalization(axis=bn_axis, epsilon=1.001e-5, name="conv1_bn")(x)
     x = layers.Activation("relu", name="conv1_relu")(x)
@@ -30,17 +30,17 @@ def get_resnet_model(input_shape: TFShape, class_count: int) -> KerasModel:
     x = layers.GlobalAveragePooling2D(name="avg_pool")(x)
     x = layers.Dense(class_count, activation="softmax", name="predictions")(x)
 
-    model = training.Model(img_input, x, name="resnet50")
+    model = Model(img_input, x, name="resnet50")
     return model
 
 
 def stack1(
-    x: KerasModel,
+    x: TFTensor,
     kernel_count: int,
     block_count: int,
     name: str,
     stride1: int = 2,
-) -> KerasModel:
+) -> TFTensor:
     """A set of stacked residual blocks.
     Arguments:
       x: input tensor.
@@ -58,13 +58,13 @@ def stack1(
 
 
 def block1(
-    x: KerasModel,
+    x: TFTensor,
     kernel_count: int,
     name: str,
     kernel_size: int = 3,
     stride: int = 1,
     conv_shortcut: bool = True,
-) -> KerasModel:
+) -> TFTensor:
     """A residual block.
     Arguments:
       x: input tensor.
@@ -77,7 +77,7 @@ def block1(
     Returns:
       Output tensor for the residual block.
     """
-    bn_axis = 3 if backend.image_data_format() == "channels_last" else 1
+    bn_axis = 3 if keras_backend.image_data_format() == "channels_last" else 1
 
     if conv_shortcut:
         shortcut = get_custom_conv(
@@ -86,7 +86,7 @@ def block1(
             kernel_size=1,
             stride=stride,
             name=name + "_0_conv",
-        )(x)
+        )
         shortcut = layers.BatchNormalization(
             axis=bn_axis, epsilon=1.001e-5, name=name + "_0_bn"
         )(shortcut)
@@ -99,7 +99,7 @@ def block1(
         kernel_size=1,
         stride=stride,
         name=name + "_1_conv",
-    )(x)
+    )
     x = layers.BatchNormalization(axis=bn_axis, epsilon=1.001e-5, name=name + "_1_bn")(
         x
     )
@@ -109,17 +109,17 @@ def block1(
         x,
         kernel_count=kernel_count,
         kernel_size=kernel_size,
-        padding="SAME",
+        stride=1,
         name=name + "_2_conv",
-    )(x)
+    )
     x = layers.BatchNormalization(axis=bn_axis, epsilon=1.001e-5, name=name + "_2_bn")(
         x
     )
     x = layers.Activation("relu", name=name + "_2_relu")(x)
 
     x = get_custom_conv(
-        x, kernel_count=4 * kernel_count, kernel_size=1, name=name + "_3_conv"
-    )(x)
+        x, kernel_count=4 * kernel_count, kernel_size=1, stride=1, name=name + "_3_conv"
+    )
     x = layers.BatchNormalization(axis=bn_axis, epsilon=1.001e-5, name=name + "_3_bn")(
         x
     )
