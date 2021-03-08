@@ -29,6 +29,7 @@ def get_custom_conv(
         kernel_size,
         strides=stride,
         name=name,
+        padding="same",
         kernel_constraint=kernel_constraint,
     )(x)
     return x
