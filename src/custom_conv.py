@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 import numpy as np
 import tensorflow as tf
@@ -19,11 +19,9 @@ def get_custom_conv(
     stride: int,
     name: str,
 ) -> TFTensor:
-    kernel_config = KernelConfig(
-        kernel_shape=KernelShape.square,
-        kernel_size=kernel_size,
+    kernel_constraint = KernelShapeConstraint(
+        kernel_shape="square", kernel_size=kernel_size
     )
-    kernel_constraint = KernelShapeConstraint(kernel_config)
     x = layers.Conv2D(
         kernel_count,
         kernel_size,
@@ -35,38 +33,26 @@ def get_custom_conv(
     return x
 
 
-@dataclass
-class KernelConfig:
-    kernel_shape: KernelShape
-    kernel_size: int
-
-
-class KernelShape(Enum):
-    square = "square"
-    circle = "circle"
-    vertical_line = "vertical_line"
-    horizontal_line = "horizontal_line"
-
-
 class KernelShapeConstraint(Constraint):
     """
     Adjusts the shape of the filter by multiplying some weights by 0
     """
 
-    def __init__(self, kernel_config: KernelConfig) -> None:
-        self.kernel_config = kernel_config
-        self.mask = _get_mask(kernel_config)
+    def __init__(self, kernel_shape: str, kernel_size: int) -> None:
+        self.kernel_shape = kernel_shape
+        self.kernel_size = kernel_size
+        self.mask = _get_mask(kernel_shape, kernel_size)
 
     def __call__(self, w: Any) -> Any:
         if self.mask is None:
             return w
         return tf.multiply(self.mask, w)
 
-    def get_config(self) -> KernelConfig:
-        return self.kernel_config
+    def get_config(self) -> Dict[str, Any]:
+        return {"kernel_shape": self.kernel_shape, "kernel_size": self.kernel_size}
 
 
-def _get_mask(kernel_config: KernelConfig) -> Optional[TFConstantMask]:
+def _get_mask(kernel_shape: str, kernel_size: int) -> Optional[TFConstantMask]:
     """
     This creates a filter mask.
 
@@ -94,11 +80,11 @@ def _get_mask(kernel_config: KernelConfig) -> Optional[TFConstantMask]:
     │ 0 │ 0 │ 1 │ 1 │ 0 │ 0 │
     └───┴───┴───┴───┴───┴───┘
     """
-    if kernel_config.kernel_shape == KernelShape.circle:
+    if kernel_shape == "circle":
         mask = np.ones(
             [
-                kernel_config.kernel_size,
-                kernel_config.kernel_size,
+                kernel_size,
+                kernel_size,
                 1,
                 1,
             ],
@@ -108,7 +94,7 @@ def _get_mask(kernel_config: KernelConfig) -> Optional[TFConstantMask]:
         mask[0][-1] = 0
         mask[-1][0] = 0
         mask[-1][-1] = 0
-        if kernel_config.kernel_size > 5:
+        if kernel_size > 5:
             mask[0][1] = 0
             mask[1][0] = 0
             mask[0][-2] = 0
