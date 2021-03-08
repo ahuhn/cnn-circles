@@ -6,16 +6,12 @@
 
 from __future__ import annotations
 
-import os
-from typing import Any, Dict, List
 
 from comet_ml import Experiment
 import matplotlib.pyplot as plt
-import numpy as np
 import tensorflow as tf
-from attr import dataclass
-from tensorflow.keras.datasets.cifar10 import load_data
 
+from cifar10_data import get_cifar10_data, CIFAR10_CLASS_NAMES
 from custom_types import TFHistory
 from resnet import get_resnet_model
 
@@ -30,42 +26,9 @@ experiment = Experiment(
     workspace="ahuhn",
 )
 
-CIFAR10_CLASS_NAMES = [
-    "airplane",
-    "automobile",
-    "bird",
-    "cat",
-    "deer",
-    "dog",
-    "frog",
-    "horse",
-    "ship",
-    "truck",
-]
-
-
-@dataclass
-class ImageDataSet:
-    images: List[Any]
-    labels: List[Any]
-
-
-@dataclass
-class ImageData:
-    train: ImageDataSet
-    test: ImageDataSet
-
-
-def _get_data() -> ImageData:
-    (x_train, y_train), (x_test, y_test) = load_data()
-
-    return ImageData(
-        train=ImageDataSet(x_train, y_train), test=ImageDataSet(x_test, y_test)
-    )
-
 
 def train() -> TFHistory:
-    input_data = _get_data()
+    input_data = get_cifar10_data()
 
     initial_learning_rate = 0.001
     lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
@@ -88,13 +51,14 @@ def train() -> TFHistory:
     history = model.fit(
         input_data.train.images,
         input_data.train.labels,
-        epochs=5,
+        epochs=1,
         validation_data=(input_data.test.images, input_data.test.labels),
     )
+    model.save("trained_models/resnet_squares")
     print(model.summary())
     print(history.history)
 
-    plot_history(history)
+    # plot_history(history)
 
     test_loss, test_acc = model.evaluate(
         input_data.test.images, input_data.test.labels, verbose=2

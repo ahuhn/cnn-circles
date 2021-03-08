@@ -20,10 +20,14 @@ def get_resnet_model(input_shape: TFShape, class_count: int) -> KerasModel:
     x = layers.BatchNormalization(axis=bn_axis, epsilon=1.001e-5, name="conv1_bn")(x)
     x = layers.Activation("relu", name="conv1_relu")(x)
 
-    x = stack1(x, kernel_count=64, block_count=3, stride1=1, name="conv2")
-    x = stack1(x, kernel_count=128, block_count=4, name="conv3")
-    x = stack1(x, kernel_count=256, block_count=6, name="conv4")
-    x = stack1(x, kernel_count=512, block_count=3, name="conv5")
+    # x = stack1(x, kernel_count=64, block_count=3, stride1=1, name="conv2")
+    # x = stack1(x, kernel_count=128, block_count=4, name="conv3")
+    # x = stack1(x, kernel_count=256, block_count=6, name="conv4")
+    # x = stack1(x, kernel_count=512, block_count=3, name="conv5")
+    x = stack1(x, kernel_count=32, block_count=3, stride1=1, name="conv2")
+    x = stack1(x, kernel_count=64, block_count=4, name="conv3")
+    x = stack1(x, kernel_count=128, block_count=6, name="conv4")
+    x = stack1(x, kernel_count=256, block_count=3, name="conv5")
 
     x = layers.GlobalAveragePooling2D(name="avg_pool")(x)
     x = layers.Dense(class_count, activation="softmax", name="predictions")(x)
