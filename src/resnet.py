@@ -3,12 +3,10 @@ from __future__ import annotations
 # from tensorflow.keras import datasets, layers, models, constraints, Input, Sequential, regularizers
 from tensorflow.keras import Model
 from tensorflow.keras import backend as keras_backend
-from tensorflow.keras.layers import VersionAwareLayers
+from tensorflow.keras import layers
 
-from src.custom_conv import get_custom_conv
-from src.types import KerasModel, TFShape, TFTensor
-
-layers = VersionAwareLayers()
+from custom_conv import get_custom_conv
+from custom_types import KerasModel, TFShape, TFTensor
 
 
 def get_resnet_model(input_shape: TFShape, class_count: int) -> KerasModel:

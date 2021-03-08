@@ -1,17 +1,24 @@
+""" train_cnn.py
+
+    Skipping isort here so comet_ml is imported before tensorflow
+    isort:skip_file
+"""
+
 from __future__ import annotations
 
 import os
 from typing import Any, Dict, List
 
+from comet_ml import Experiment
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
 from attr import dataclass
-from comet_ml import Experiment
 from tensorflow.keras.datasets.cifar10 import load_data
 
-from src.resnet import get_resnet_model
-from src.types import TFHistory
+from custom_types import TFHistory
+from resnet import get_resnet_model
+
 
 experiment = Experiment(
     auto_metric_logging=True,
@@ -57,7 +64,7 @@ def _get_data() -> ImageData:
     )
 
 
-def train(filter_config: List[Dict[str, Any]]) -> TFHistory:
+def train() -> TFHistory:
     input_data = _get_data()
 
     initial_learning_rate = 0.001
@@ -81,13 +88,13 @@ def train(filter_config: List[Dict[str, Any]]) -> TFHistory:
     history = model.fit(
         input_data.train.images,
         input_data.train.labels,
-        epochs=100,
+        epochs=5,
         validation_data=(input_data.test.images, input_data.test.labels),
     )
     print(model.summary())
     print(history.history)
 
-    # plot_history(history)
+    plot_history(history)
 
     test_loss, test_acc = model.evaluate(
         input_data.test.images, input_data.test.labels, verbose=2
@@ -108,53 +115,4 @@ def plot_history(history: TFHistory) -> None:
 
 
 if __name__ == "__main__":
-    filter_config = [
-        {
-            "filter_shape_name": "square",
-            "filter_dims": (2, 2),
-            "filter_count": 8,
-        },
-        {
-            "filter_shape_name": "square",
-            "filter_dims": (3, 3),
-            "filter_count": 16,
-        },
-        {
-            "filter_shape_name": "circle",
-            "filter_dims": (3, 3),
-            "filter_count": 16,
-        },
-        {
-            "filter_shape_name": "circle",
-            "filter_dims": (4, 4),
-            "filter_count": 16,
-        },
-        {
-            "filter_shape_name": "vertical_line",  # TODO: Not sure if this is horizontal or vertical
-            "filter_dims": (5, 2),
-            "filter_count": 8,
-        },
-        {
-            "filter_shape_name": "horizontal_line",  # TODO: Not sure if this is horizontal or vertical
-            "filter_dims": (2, 5),
-            "filter_count": 8,
-        },
-        {
-            "filter_shape_name": "vertical_line",  # TODO: Not sure if this is horizontal or vertical
-            "filter_dims": (5, 1),
-            "filter_count": 4,
-        },
-        {
-            "filter_shape_name": "horizontal_line",  # TODO: Not sure if this is horizontal or vertical
-            "filter_dims": (1, 5),
-            "filter_count": 4,
-        },
-        # {
-        #     "filter_shape_name": "square",
-        #     "filter_dims": (3, 3),
-        #     "filter_count": 64,
-        # },
-    ]
-
-    history = train(filter_config)
-    # plot_history(history)
+    train()

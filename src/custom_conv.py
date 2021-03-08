@@ -6,12 +6,10 @@ from typing import Any, Optional
 import numpy as np
 import tensorflow as tf
 from attr import dataclass
+from tensorflow.keras import layers
 from tensorflow.keras.constraints import Constraint
-from tensorflow.keras.layers import VersionAwareLayers
 
-from src.types import TFConstantMask, TFTensor
-
-layers = VersionAwareLayers()
+from custom_types import TFConstantMask, TFTensor
 
 
 def get_custom_conv(
