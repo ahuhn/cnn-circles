@@ -14,6 +14,7 @@ import tensorflow as tf
 from cifar10_data import get_cifar10_data, CIFAR10_CLASS_NAMES
 from custom_types import TFHistory
 from resnet import get_resnet_model
+from custom_conv import KernelDistributionType
 
 
 experiment = Experiment(
@@ -30,20 +31,21 @@ experiment = Experiment(
 def train() -> TFHistory:
     input_data = get_cifar10_data()
 
-    initial_learning_rate = 0.001
-    lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
-        initial_learning_rate,
-        decay_steps=1000,
-        decay_rate=0.95,
-        staircase=True,
-    )
+    initial_learning_rate = 0.01
+    # lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
+    #     initial_learning_rate,
+    #     decay_steps=500,
+    #     decay_rate=0.9,
+    #     staircase=True,
+    # )
 
     model = get_resnet_model(
         input_data.train.images[0].shape,
         class_count=len(CIFAR10_CLASS_NAMES),
+        kernel_distribution_type=KernelDistributionType.all_squares,
     )
     model.compile(
-        optimizer=tf.keras.optimizers.Adam(learning_rate=lr_schedule),
+        optimizer=tf.keras.optimizers.Adam(learning_rate=initial_learning_rate),
         loss="sparse_categorical_crossentropy",
         metrics=["accuracy"],
     )
@@ -51,11 +53,11 @@ def train() -> TFHistory:
     history = model.fit(
         input_data.train.images,
         input_data.train.labels,
-        epochs=1,
+        epochs=20,
         validation_data=(input_data.test.images, input_data.test.labels),
     )
     model.save("trained_models/resnet_squares")
-    print(model.summary())
+    # print(model.summary())
     print(history.history)
 
     # plot_history(history)
