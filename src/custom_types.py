@@ -6,11 +6,7 @@ class KerasModel(Protocol):
         ...
 
     def fit(
-        self,
-        x: Any,
-        y: Any,
-        epochs: int,
-        validation_data: Any,
+        self, x: Any, y: Any, epochs: int, validation_data: Any, batch_size: int
     ) -> Any:
         ...
 

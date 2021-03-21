@@ -111,6 +111,7 @@ def get_custom_conv(
             name=name,
             padding="same",
             kernel_regularizer=regularizers.L2(l2=l2_regularization),
+            bias_regularizer=regularizers.L2(l2=l2_regularization),
         )(x)
     elif kernel_distribution_type == KernelDistributionType.mixed:
         kernel_configs = get_mixed_kernel_configs(
@@ -128,6 +129,7 @@ def get_custom_conv(
                     kernel_size=kernel_config.kernel_size,
                 ),
                 kernel_regularizer=regularizers.L2(l2=l2_regularization),
+                bias_regularizer=regularizers.L2(l2=l2_regularization),
             )(x)
             for kernel_config in kernel_configs
         ]
