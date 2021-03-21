@@ -83,7 +83,7 @@ def get_mixed_kernel_configs(
     ]
 
 
-def get_kernel_size_from_config(kernel_config: KernelConfig) -> Tuple(int, int):
+def get_kernel_size_from_config(kernel_config: KernelConfig) -> Tuple[int, int]:
     if kernel_config.kernel_shape == KernelShape.horizontal_line:
         return (kernel_config.kernel_size, 1)
     elif kernel_config.kernel_shape == KernelShape.vertical_line:
@@ -98,7 +98,7 @@ def get_custom_conv(
     stride: int,
     name: str,
     kernel_distribution_type: KernelDistributionType,
-    l2_regularization: float = 0.01,
+    l2_regularization: float = 0.0001,
 ) -> TFTensor:
     if (
         kernel_distribution_type == KernelDistributionType.all_squares

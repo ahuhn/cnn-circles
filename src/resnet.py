@@ -3,7 +3,7 @@ from __future__ import annotations
 # from tensorflow.keras import datasets, layers, models, constraints, Input, Sequential, regularizers
 from tensorflow.keras import Model
 from tensorflow.keras import backend as keras_backend
-from tensorflow.keras import layers
+from tensorflow.keras import layers, regularizers
 
 from custom_conv import KernelDistributionType, get_custom_conv
 from custom_types import KerasModel, TFShape, TFTensor
@@ -13,18 +13,20 @@ def get_resnet_model(
     input_shape: TFShape,
     class_count: int,
     kernel_distribution_type: KernelDistributionType,
+    block_count_per_layer: int,
+    l2_regularization: float = 0.0001,
 ) -> KerasModel:
     img_input = layers.Input(shape=input_shape)
     bn_axis = 3 if keras_backend.image_data_format() == "channels_last" else 1
 
     x = get_custom_conv(
         img_input,
-        total_kernel_count=64,
-        approximate_kernel_size=7,
+        total_kernel_count=16,
+        approximate_kernel_size=3,
         stride=2,
         name="conv1_conv",
         kernel_distribution_type=kernel_distribution_type,
-        l2_regularization=0.0001,
+        l2_regularization=l2_regularization,
     )
 
     x = layers.BatchNormalization(axis=bn_axis, epsilon=1.001e-5, name="conv1_bn")(x)
@@ -32,44 +34,39 @@ def get_resnet_model(
 
     x = stack1(
         x,
-        kernel_count=64,
-        block_count=3,
+        kernel_count=16,
+        block_count=block_count_per_layer,
         kernel_distribution_type=kernel_distribution_type,
         stride1=1,
         name="conv2",
-        l2_regularization=0.0001,
+        l2_regularization=l2_regularization,
     )
     x = stack1(
         x,
-        kernel_count=128,
-        block_count=4,
+        kernel_count=32,
+        block_count=block_count_per_layer,
         kernel_distribution_type=kernel_distribution_type,
         name="conv3",
-        l2_regularization=0.0003,
+        l2_regularization=l2_regularization,
     )
     x = stack1(
         x,
-        kernel_count=256,
-        block_count=6,
+        kernel_count=64,
+        block_count=block_count_per_layer,
         kernel_distribution_type=kernel_distribution_type,
         name="conv4",
-        l2_regularization=0.001,
-    )
-    x = stack1(
-        x,
-        kernel_count=512,
-        block_count=3,
-        kernel_distribution_type=kernel_distribution_type,
-        name="conv5",
-        l2_regularization=0.003,
+        l2_regularization=l2_regularization,
     )
 
     x = layers.GlobalAveragePooling2D(name="avg_pool")(x)
     x = layers.Dense(
-        class_count, activation="softmax", name="predictions", kernel_regularizer="l2"
+        class_count,
+        activation="softmax",
+        name="predictions",
+        kernel_regularizer=regularizers.L2(l2=l2_regularization),
     )(x)
 
-    model = Model(img_input, x, name="resnet50")
+    model = Model(img_input, x, name="custom_resnet")
     return model
 
 
@@ -80,7 +77,7 @@ def stack1(
     name: str,
     kernel_distribution_type: KernelDistributionType,
     stride1: int = 2,
-    l2_regularization: float = 0.01,
+    l2_regularization: float = 0.0001,
 ) -> TFTensor:
     """A set of stacked residual blocks.
     Arguments:
@@ -119,7 +116,7 @@ def block1(
     kernel_distribution_type: KernelDistributionType,
     stride: int = 1,
     conv_shortcut: bool = True,
-    l2_regularization: float = 0.01,
+    l2_regularization: float = 0.0001,
 ) -> TFTensor:
     """A residual block.
     Arguments:
