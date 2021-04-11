@@ -14,17 +14,14 @@ def train() -> TFHistory:
     model = get_resnet_model(
         input_data.train.images[0].shape,
         class_count=len(CIFAR10_CLASS_NAMES),
-        kernel_distribution_type=KernelDistributionType.all_squares,
+        kernel_distribution_type=KernelDistributionType.mixed,
         block_count_per_layer=3,
     )
     print(model.summary())
 
-    initial_learning_rate = 0.1
-    lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
-        initial_learning_rate,
-        decay_steps=10000,
-        decay_rate=0.3,
-        staircase=True,
+    lr_schedule = tf.keras.optimizers.schedules.PiecewiseConstantDecay(
+        boundaries=[32000, 48000],
+        values=[0.1, 0.01, 0.001],
     )
 
     model.compile(
@@ -44,7 +41,7 @@ def train() -> TFHistory:
         preprocesser.flow(
             input_data.train.images, input_data.train.labels, batch_size=128
         ),
-        epochs=100,
+        epochs=164,
         validation_data=(input_data.test.images, input_data.test.labels),
     )
-    model.save("trained_models/resnet_squares_with_augmentation")
+    model.save("trained_models/resnet_mixed_with_augmentation_and_init")

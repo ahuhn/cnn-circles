@@ -64,6 +64,7 @@ def get_resnet_model(
         activation="softmax",
         name="predictions",
         kernel_regularizer=regularizers.L2(l2=l2_regularization),
+        kernel_initializer="he_normal",
     )(x)
 
     model = Model(img_input, x, name="custom_resnet")

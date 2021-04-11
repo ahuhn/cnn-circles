@@ -12,6 +12,10 @@ from tensorflow.keras.constraints import Constraint
 from custom_types import TFConstantMask, TFTensor
 
 
+class NotImplementedError(Exception):
+    """This case is not yet implemented"""
+
+
 class KernelDistributionType(Enum):
     all_squares = "all_squares"
     mixed = "mixed"
@@ -33,6 +37,8 @@ class KernelShape(Enum):
     circle = "circle"
     vertical_line = "vertical_line"
     horizontal_line = "horizontal_line"
+    diagonal_up = "diagonal_up"
+    diagonal_down = "diagonal_down"
 
 
 def get_mixed_kernel_configs(
@@ -61,12 +67,12 @@ def get_mixed_kernel_configs(
             kernel_count=int(total_kernel_count / config_count),
         ),
         KernelConfig(
-            kernel_shape=KernelShape.horizontal_line,
+            kernel_shape=KernelShape.diagonal_up,
             kernel_size=approximate_kernel_size,
             kernel_count=int(total_kernel_count / config_count),
         ),
         KernelConfig(
-            kernel_shape=KernelShape.vertical_line,
+            kernel_shape=KernelShape.diagonal_down,
             kernel_size=approximate_kernel_size,
             kernel_count=int(total_kernel_count / config_count),
         ),
@@ -112,6 +118,7 @@ def get_custom_conv(
             padding="same",
             kernel_regularizer=regularizers.L2(l2=l2_regularization),
             bias_regularizer=regularizers.L2(l2=l2_regularization),
+            kernel_initializer="he_normal",
         )(x)
     elif kernel_distribution_type == KernelDistributionType.mixed:
         kernel_configs = get_mixed_kernel_configs(
@@ -130,10 +137,11 @@ def get_custom_conv(
                 ),
                 kernel_regularizer=regularizers.L2(l2=l2_regularization),
                 bias_regularizer=regularizers.L2(l2=l2_regularization),
+                kernel_initializer="he_normal",
             )(x)
             for kernel_config in kernel_configs
         ]
-        x = layers.Add(name=name + "_add")(parallel_convs)
+        x = layers.Concatenate(name=name + "_concat")(parallel_convs)
         return x
     raise Exception
 
@@ -185,16 +193,27 @@ def _get_mask(kernel_shape: str, kernel_size: int) -> Optional[TFConstantMask]:
     │ 0 │ 0 │ 1 │ 1 │ 0 │ 0 │
     └───┴───┴───┴───┴───┴───┘
     """
+    if kernel_shape in {"square", "horizontal_line", "vertical_line"}:
+        return None
+
+    mask = np.ones(
+        [
+            kernel_size,
+            kernel_size,
+            1,
+            1,
+        ],
+        dtype=np.float32,
+    )
+    if kernel_shape == "diagonal_up":
+        mask[0][0] = 0
+        mask[-1][-1] = 0
+        return tf.constant(mask)
+    if kernel_shape == "diagonal_down":
+        mask[0][-1] = 0
+        mask[-1][0] = 0
+        return tf.constant(mask)
     if kernel_shape == "circle":
-        mask = np.ones(
-            [
-                kernel_size,
-                kernel_size,
-                1,
-                1,
-            ],
-            dtype=np.float32,
-        )
         mask[0][0] = 0
         mask[0][-1] = 0
         mask[-1][0] = 0
@@ -209,4 +228,6 @@ def _get_mask(kernel_shape: str, kernel_size: int) -> Optional[TFConstantMask]:
             mask[-1][-2] = 0
             mask[-2][-1] = 0
         return tf.constant(mask)
-    return None
+    raise NotImplementedError(
+        "Please add the mask details for this kernel_shape to _get_mask"
+    )
